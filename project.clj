@@ -1,4 +1,4 @@
-(defproject hato "0.0.0"
+(defproject gorillalabs/hato "0.0.0"
   :description "An HTTP client for Clojure, wrapping JDK 11's HttpClient, using muuntaja for content format negotiation."
   :url "https://github.com/gorillalabs/hato"
   :license {:name         "The MIT License"

@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [get])
   (:require [clojure.test :refer :all]
             [hato.client :refer :all]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [clojure.edn :as edn])
   (:import (java.io InputStream)
            (java.net ProxySelector CookieHandler Authenticator CookieManager)
            (java.net.http HttpClient$Redirect HttpClient$Version HttpClient)
@@ -152,7 +153,16 @@
   (testing "can opt out"
     (is (= 500 (:status (get "https://httpbin.org/status/500" {:throw-exceptions false}))))))
 
-(deftest ^:integration test-coercions
+(deftest ^:integration test-request-coercions
+  (testing "as default, fall back to the default of the muuntaja instance, here json"
+    (let [r (put "https://httpbin.org/put" {:body {:email "abc@gmail.com", :name "mkyong"}})]
+      (is (coll? (:json (:body r))))))
+  (testing "Use content-type header to encode the body."
+    (let [r (put "https://httpbin.org/put" {:body {:email "abc@gmail.com", :name "mkyong"}
+                                            :content-type :edn})]
+      (is (coll? (edn/read-string (:data (:body r))))))))
+
+(deftest ^:integration test-response-coercions
   (testing "as default, depends on Content-Type header"
     (let [r (get "https://httpbin.org/get")]
       (is (coll? (:body r)))))

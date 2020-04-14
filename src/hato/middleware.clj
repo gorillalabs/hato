@@ -145,6 +145,45 @@
              #(respond (response-body-coercion (m/create muuntaja) req %))
              raise))))
 
+
+;; Multimethods for coercing body type to the :content-type header
+(defmulti coerce-request-body (fn [muuntaja-instance req] (:as req)))
+
+#_(defmethod coerce-request-body :byte-array [_ req]
+  req)
+
+#_(defmethod coerce-request-body :stream [_ req]
+  req)
+
+#_(defmethod coerce-request-body :string [_ {:keys [body] :as req}]
+  (let [^String charset (or (-> req :content-type-params :charset) "UTF-8")]
+    (assoc req :body (String. ^"[B" body charset))))
+
+(defmethod coerce-request-body :default
+  [muuntaja-instance req]
+  (let [encoded (m/encode-request-body muuntaja-instance req)]
+    (assoc req :body encoded)))
+
+(defn- request-body-coercion
+  [muuntaja-instance {:keys [body] :as req}]
+  (if body
+    (coerce-request-body muuntaja-instance req)
+    req))
+
+(defn wrap-request-body-coercion
+  "Middleware converting a request body from an object to a byte-array.
+  Defaults to a String if no :as key is specified, the `coerce-response-body`
+  multimethod may be extended to add additional coercions."
+  [client]
+  (fn
+    ([{:keys [muuntaja] :as req}]
+     (client (request-body-coercion (m/create muuntaja) req)))
+    ([{:keys [muuntaja] :as req} respond raise]
+     (client (request-body-coercion (m/create muuntaja) req)
+             #(respond %)
+             raise))))
+
+
 (defn content-type-value [type]
   (if (keyword? type)
     (str "application/" (name type))
@@ -590,9 +629,10 @@
    wrap-accept-encoding
    wrap-multipart
 
-   wrap-content-type
+   wrap-request-body-coercion
    wrap-form-params
    wrap-nested-params
+   wrap-content-type
    wrap-method
    wrap-muuntaja])
 

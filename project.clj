@@ -8,7 +8,7 @@
   :middleware [leiningen.v/version-from-scm
                leiningen.v/dependency-version-from-scm
                leiningen.v/add-workspace-data]
-  :dependencies [[gorillalabs/muuntaja "0.7.0"]]
+  :dependencies [[gorillalabs/muuntaja "0.8.0"]]
   :profiles {:dev {:dependencies [[org.clojure/clojure "1.10.1"]
                                   [http-kit "2.3.0"]]}}
   :scm {:name "git"

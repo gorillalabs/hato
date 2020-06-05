@@ -144,9 +144,16 @@ request and returns a response. Convenience wrappers are provided for the http v
 `content-type` a keyword (e.g. `:json`, for any application/* type) or string (e.g. "text/html") for anything else. 
   Sets the appropriate header.
   
-`body` the body of the request. This should be a string, byte array, input stream, 
+`body` the body of the request. The body will be automatically coerced to the content-type or you can force it to be an uncoerced string, byte array, input stream, 
   or a [`java.net.http.HttpRequest$BodyPublisher`](https://docs.oracle.com/en/java/javase/11/docs/api/java.net.http/java/net/http/HttpRequest.BodyPublisher.html).
-  To send a clojure map as json (or some other format), use the `form-params` option with the appropriate `content-type`.
+
+`is` indicates the type of the request body to override default coercion based on the content type. Valid options:
+
+- `:string` indicates body is a string to be sent as a body directly. Make sure your encoding is correct, as no autocoercion or transcoding is performed whatsoever.
+- `:byte-array` use this if you body is a byte-array to be sent as is.
+- `:stream` indicates body is an OutputStream.
+
+...
   
 `as` Return response body in a certain format. Valid options:
 
@@ -299,6 +306,9 @@ As a convenience, nesting can also be controlled by `:flatten-nested-keys`:
 (hc/post "http://moo.com" {... :flatten-nested-keys [:query-params]})
 ```
 
+### Input coercion
+
+Your body will be coerced from a clojure datastructure to the format set by the content-type header by default.
 
 ### Output coercion
 

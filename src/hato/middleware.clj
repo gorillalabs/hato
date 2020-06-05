@@ -9,18 +9,19 @@
    [muuntaja.core :as m]
    [hato.format.text :as format.text])
   (:import
-   (java.util
-    Base64)
-   (java.io
-    InputStream
-    ByteArrayInputStream
-    ByteArrayOutputStream BufferedInputStream)
-   (java.net
-    URLDecoder
-    URLEncoder
-    URL)
-   (java.util.zip
-    GZIPInputStream InflaterInputStream ZipException Inflater)))
+    (java.util
+      Base64)
+    (java.io
+      InputStream
+      ByteArrayInputStream
+      ByteArrayOutputStream BufferedInputStream)
+    (java.net
+      URLDecoder
+      URLEncoder
+      URL)
+    (java.util.zip
+      GZIPInputStream InflaterInputStream ZipException Inflater)
+    (java.net.http HttpRequest$BodyPublishers)))
 
 ;;;
 
@@ -147,7 +148,7 @@
 
 
 ;; Multimethods for coercing body type to the :content-type header
-(defmulti coerce-request-body (fn [muuntaja-instance req] (:as req)))
+(defmulti coerce-request-body (fn [muuntaja-instance req] (:is req)))
 
 #_(defmethod coerce-request-body :byte-array [_ req]
   req)
@@ -155,9 +156,22 @@
 #_(defmethod coerce-request-body :stream [_ req]
   req)
 
-#_(defmethod coerce-request-body :string [_ {:keys [body] :as req}]
-  (let [^String charset (or (-> req :content-type-params :charset) "UTF-8")]
-    (assoc req :body (String. ^"[B" body charset))))
+(defmethod coerce-request-body :string [_ {:keys [body] :as req}]
+  ;; TODO: make sure to handle character-set information correctly.
+  ;; - Problem right now: what is correctly?
+  ;; - Is character set information handled by java.net.http in some way?
+  #_(let [^String charset (or (-> req :content-type-params :charset) "UTF-8")]
+    (assoc req :body (String. ^"[B" body charset)))
+  (assoc req :body (HttpRequest$BodyPublishers/ofString body)))
+
+(defmethod coerce-request-body :byte-array [_ {:keys [body] :as req}]
+  (assoc req :body (HttpRequest$BodyPublishers/ofByteArray body)))
+
+(defmethod coerce-request-body :stream [_ {:keys [body] :as req}]
+  (assoc req :body (HttpRequest$BodyPublishers/ofInputStream body)))
+
+(defmethod coerce-request-body :body-publisher [_ {:keys [body] :as req}]
+  (assoc req :body body))
 
 (defmethod coerce-request-body :default
   [muuntaja-instance req]

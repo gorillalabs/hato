@@ -6,10 +6,11 @@
             [clojure.edn :as edn])
   (:import (java.io InputStream)
            (java.net ProxySelector CookieHandler Authenticator CookieManager)
-           (java.net.http HttpClient$Redirect HttpClient$Version HttpClient)
+           (java.net.http HttpClient$Redirect HttpClient$Version HttpClient HttpRequest$BodyPublishers)
            (java.time Duration)
            (javax.net.ssl SSLContext)
-           (java.util UUID)))
+           (java.util UUID)
+           (java.nio.charset Charset)))
 
 (deftest test-build-http-client
   (testing "authenticator"
@@ -25,11 +26,11 @@
   (testing "cookie-manager and cookie-policy"
     (is (.isEmpty (.cookieHandler (build-http-client {}))) "not set by default")
     (are [x] (instance? CookieHandler (-> ^HttpClient (build-http-client {:cookie-policy x}) (.cookieHandler) (.get)))
-      :none
-      :all
-      :original-server
-      :any-random-thing                              ; Invalid values are ignored, so the default :original-server will be in effect
-      )
+             :none
+             :all
+             :original-server
+             :any-random-thing                              ; Invalid values are ignored, so the default :original-server will be in effect
+             )
 
     (let [cm (CookieManager.)]
       (is (= cm (-> (build-http-client {:cookie-handler cm :cookie-policy :all}) (.cookieHandler) (.get)))
@@ -38,9 +39,9 @@
   (testing "redirect-policy"
     (is (= HttpClient$Redirect/NEVER (.followRedirects (build-http-client {}))) "NEVER by default")
     (are [expected option] (= expected (.followRedirects (build-http-client {:redirect-policy option})))
-      HttpClient$Redirect/ALWAYS :always
-      HttpClient$Redirect/NEVER :never
-      HttpClient$Redirect/NORMAL :normal)
+                           HttpClient$Redirect/ALWAYS :always
+                           HttpClient$Redirect/NEVER :never
+                           HttpClient$Redirect/NORMAL :normal)
     (is (thrown? Exception (build-http-client {:redirect-policy :not-valid-value}))))
 
   (testing "priority"
@@ -48,9 +49,9 @@
     (is (build-http-client {:priority 256}))
     (is (thrown? Exception (build-http-client {:priority :not-a-number})))
     (are [x] (thrown? Exception (build-http-client {:priority x}))
-      :not-a-number
-      0
-      257))
+             :not-a-number
+             0
+             257))
 
   (testing "proxy"
     (is (.isEmpty (.proxy (build-http-client {}))) "not set by default")
@@ -67,8 +68,8 @@
   (testing "version"
     (is (= HttpClient$Version/HTTP_2 (.version (build-http-client {}))) "HTTP_2 by default")
     (are [expected option] (= expected (.version (build-http-client {:version option})))
-      HttpClient$Version/HTTP_1_1 :http-1.1
-      HttpClient$Version/HTTP_2 :http-2)
+                           HttpClient$Version/HTTP_1_1 :http-1.1
+                           HttpClient$Version/HTTP_2 :http-2)
     (is (thrown? Exception (build-http-client {:version :not-valid-value})))))
 
 (deftest ^:integration test-basic-response
@@ -100,13 +101,13 @@
   #_(head "https://httpbin.org/status/200")
   (testing "verbs exist"
     (are [fn] (= 200 (:status (fn "https://httpbin.org/status/200")))
-      get
-      post
-      put
-      patch
-      delete
-      head
-      options)))
+              get
+              post
+              put
+              patch
+              delete
+              head
+              options)))
 
 (deftest ^:integration test-multipart-response
   (testing "basic get request returns response map"
@@ -158,7 +159,7 @@
     (let [r (put "https://httpbin.org/put" {:body {:email "abc@gmail.com", :name "mkyong"}})]
       (is (coll? (:json (:body r))))))
   (testing "Use content-type header to encode the body."
-    (let [r (put "https://httpbin.org/put" {:body {:email "abc@gmail.com", :name "mkyong"}
+    (let [r (put "https://httpbin.org/put" {:body         {:email "abc@gmail.com", :name "mkyong"}
                                             :content-type :edn})]
       (is (coll? (edn/read-string (:data (:body r))))))))
 
@@ -184,6 +185,62 @@
   (testing "as json"
     (let [r (get "https://httpbin.org/get" {:as :json})]
       (is (coll? (:body r))))))
+
+(defn ^java.util.function.Function as-supplier [f]
+  (reify java.util.function.Supplier
+    (get [this]
+      (f))))
+
+
+(deftest ^:integration test-request-coercions
+  (testing "as default, with no Content-Type header, use default encoder (defaults to json)"
+    (let [r (get "https://httpbin.org/anything" {:body {:a 1}})]
+      (is (= "{\"a\":1}" (:data (:body r))))))
+
+  (testing "follow Content-Type header"
+    (let [r (get "https://httpbin.org/anything" {:content-type :edn
+                                                 :body         {:a 1}})]
+      (is (= "{:a 1}" (:data (:body r))))))
+
+  (testing "do not follow Content-Type header, but use String as stated"
+    (let [r (get "https://httpbin.org/anything" {:content-type :application/xml
+                                                 :is           :string
+                                                 :body         "<a>1</a>"})]
+      (is (= "<a>1</a>" (:data (:body r))))))
+
+  (testing "do not follow Content-Type header, but use Byte-Array as stated"
+    (let [r (get "https://httpbin.org/anything" {:content-type :application/xml
+                                                 :is           :byte-array
+                                                 :body         (.getBytes "<a>1</a>" "UTF-8")})]
+      (is (= "<a>1</a>" (:data (:body r))))))
+
+  (testing "do not follow Content-Type header, but use InputStream as stated"
+    (let [r (get "https://httpbin.org/anything" {:content-type :application/xml
+                                                 :is           :stream
+                                                 :body         (as-supplier #(-> (.getBytes "<a>1</a>" "UTF-8")
+                                                                   (java.io.ByteArrayInputStream.)))})]
+      (is (= "<a>1</a>" (:data (:body r))))))
+
+  (testing "do not follow Content-Type header, but use BodyHnadler as stated"
+    (let [r (get "https://httpbin.org/anything" {:content-type :application/xml
+                                                 :is           :body-publisher
+                                                 :body         (HttpRequest$BodyPublishers/ofString "<a>1</a>")})]
+      (is (= "<a>1</a>" (:data (:body r))))))
+
+
+
+  #_(testing "as stream"
+      (let [r (get "https://httpbin.org/get" {:as :stream})]
+        (is (instance? InputStream (:body r)))
+        (is (string? (-> r :body slurp)))))
+
+  #_(testing "as body-publisher"
+      (let [r (get "https://httpbin.org/get" {:as :string})]
+        (is (string? (:body r)))))
+
+  #_(testing "as json"
+      (let [r (get "https://httpbin.org/get" {:as :json})]
+        (is (coll? (:body r))))))
 
 (deftest ^:integration test-auth
   (testing "authenticator basic auth (non-preemptive) via client option"
@@ -236,8 +293,8 @@
 
     (testing "default max redirects"
       (are [status redirects] (= status (:status (get (str "https://httpbin.org/redirect/" redirects) {:http-client {:redirect-policy :normal}})))
-        200 4
-        302 5))))
+                              200 4
+                              302 5))))
 
 (deftest ^:integration test-cookies
   (testing "no cookie manager"

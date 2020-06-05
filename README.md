@@ -151,9 +151,9 @@ request and returns a response. Convenience wrappers are provided for the http v
 
 - `:string` indicates body is a string to be sent as a body directly. Make sure your encoding is correct, as no autocoercion or transcoding is performed whatsoever.
 - `:byte-array` use this if you body is a byte-array to be sent as is.
-- `:stream` indicates body is an OutputStream.
+- `:stream` indicates body is a function returning an InputStream.
+- :body-publisher indicates body is a [BodyPublisher](https://docs.oracle.com/en/java/javase/11/docs/api/java.net.http/java/net/http/HttpRequest.BodyPublishers.html).
 
-...
   
 `as` Return response body in a certain format. Valid options:
 

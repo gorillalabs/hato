@@ -186,11 +186,6 @@
     (let [r (get "https://httpbin.org/get" {:as :json})]
       (is (coll? (:body r))))))
 
-(defn ^java.util.function.Function as-supplier [f]
-  (reify java.util.function.Supplier
-    (get [this]
-      (f))))
-
 
 (deftest ^:integration test-request-coercions
   (testing "as default, with no Content-Type header, use default encoder (defaults to json)"
@@ -217,11 +212,11 @@
   (testing "do not follow Content-Type header, but use InputStream as stated"
     (let [r (get "https://httpbin.org/anything" {:content-type :application/xml
                                                  :is           :stream
-                                                 :body         (as-supplier #(-> (.getBytes "<a>1</a>" "UTF-8")
-                                                                   (java.io.ByteArrayInputStream.)))})]
+                                                 :body         #(-> (.getBytes "<a>1</a>" "UTF-8")
+                                                                    (java.io.ByteArrayInputStream.))})]
       (is (= "<a>1</a>" (:data (:body r))))))
 
-  (testing "do not follow Content-Type header, but use BodyHnadler as stated"
+  (testing "do not follow Content-Type header, but use BodyPublisher as stated"
     (let [r (get "https://httpbin.org/anything" {:content-type :application/xml
                                                  :is           :body-publisher
                                                  :body         (HttpRequest$BodyPublishers/ofString "<a>1</a>")})]

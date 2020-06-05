@@ -167,8 +167,13 @@
 (defmethod coerce-request-body :byte-array [_ {:keys [body] :as req}]
   (assoc req :body (HttpRequest$BodyPublishers/ofByteArray body)))
 
+(defn- ^java.util.function.Function as-supplier [f]
+  (reify java.util.function.Supplier
+    (get [this]
+      (f))))
+
 (defmethod coerce-request-body :stream [_ {:keys [body] :as req}]
-  (assoc req :body (HttpRequest$BodyPublishers/ofInputStream body)))
+  (assoc req :body (HttpRequest$BodyPublishers/ofInputStream (as-supplier body))))
 
 (defmethod coerce-request-body :body-publisher [_ {:keys [body] :as req}]
   (assoc req :body body))
